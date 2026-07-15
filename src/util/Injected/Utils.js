@@ -1106,16 +1106,88 @@ exports.LoadUtils = () => {
     };
 
     /**
+     * Resolves a message model from a message ID, trying multiple key
+     * formats. Some WhatsApp Web versions reject a plain _serialized
+     * string as an IndexedDB key (DataError: No key or key range
+     * specified), so each lookup is attempted with several candidate
+     * key shapes before falling back to scanning loaded models.
+     * @param {string|Object} msgId Serialized message ID or full message ID object
+     * @returns {Promise<Object|null>} The message model, or null if not found
+     */
+    window.WWebJS.getMessageById = async (msgId) => {
+        const { Msg } = window.require('WAWebCollections');
+
+        const serialized =
+            typeof msgId === 'string' ? msgId : msgId?._serialized;
+
+        const candidates = [];
+        if (typeof msgId === 'string') {
+            candidates.push(msgId);
+        } else if (msgId) {
+            serialized && candidates.push(serialized);
+            candidates.push(msgId);
+        }
+
+        // Reconstructed key with proper Wid instances for remote and
+        // participant, since a structured-cloned ID loses its Wid
+        // prototypes when passed through puppeteer
+        try {
+            if (serialized) {
+                candidates.push(
+                    window.require('WAWebMsgKey').fromString(serialized),
+                );
+            }
+            if (typeof msgId === 'object' && msgId?.remote) {
+                const { createWid } = window.require('WAWebWidFactory');
+                const reconstructed = {
+                    ...msgId,
+                    remote: createWid(msgId.remote._serialized || msgId.remote),
+                };
+                msgId.participant &&
+                    (reconstructed.participant = createWid(
+                        msgId.participant._serialized || msgId.participant,
+                    ));
+                candidates.push(reconstructed);
+            }
+        } catch {
+            /* key reconstruction is best-effort */
+        }
+
+        for (const candidate of candidates) {
+            try {
+                const msg = Msg.get(candidate);
+                if (msg) return msg;
+            } catch {
+                /* try next candidate */
+            }
+            try {
+                const fetched = await Msg.getMessagesById([candidate]);
+                if (fetched?.messages?.[0]) return fetched.messages[0];
+            } catch {
+                /* try next candidate */
+            }
+        }
+
+        // Last resort: scan the models already loaded in memory
+        if (serialized) {
+            const models =
+                Msg.getModelsArray?.() || Msg.models || Msg._models || [];
+            for (const model of models) {
+                if (model?.id?._serialized === serialized) return model;
+            }
+        }
+
+        return null;
+    };
+
+    /**
      * Resolves the media blob and metadata for a message.
      * Shared by downloadMedia and downloadMediaStream.
-     * @param {string} msgId
+     * @param {string|Object} msgId Serialized message ID or full message ID object
      * @returns {Promise<{blob: Blob, mimetype: string, filename: string, filesize: number}|null>}
      */
     window.WWebJS.resolveMediaBlob = async (msgId) => {
-        const { Msg } = window.require('WAWebCollections');
-        const msg =
-            Msg.get(msgId) ||
-            (await Msg.getMessagesById([msgId]))?.messages?.[0];
+        const msg = await window.WWebJS.getMessageById(msgId);
 
         if (
             !msg ||

@@ -527,7 +527,7 @@ class Message extends Base {
                 filename: resolved.filename,
                 filesize: resolved.filesize,
             };
-        }, this.id._serialized);
+        }, this.id);
 
         if (!result) return undefined;
         return new MessageMedia(
@@ -552,21 +552,21 @@ class Message extends Base {
                 const result = await window.WWebJS.resolveMediaBlob(msgId);
                 return result?.blob ?? null;
             },
-            this.id._serialized,
+            this.id,
         );
 
         let metadata;
         try {
-            metadata = await blobHandle.evaluate((blob, msgId) => {
+            metadata = await blobHandle.evaluate(async (blob, msgId) => {
                 if (!blob) return null;
-                const msg = window.require('WAWebCollections').Msg.get(msgId);
+                const msg = await window.WWebJS.getMessageById(msgId);
                 return {
                     blobSize: blob.size,
                     mimetype: msg?.mimetype,
                     filename: msg?.filename,
                     filesize: msg?.size,
                 };
-            }, this.id._serialized);
+            }, this.id);
         } catch (err) {
             await blobHandle.dispose().catch(() => {});
             throw err;
