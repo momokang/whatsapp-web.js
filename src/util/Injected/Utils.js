@@ -982,20 +982,11 @@ exports.LoadUtils = () => {
         model.lastMessage = null;
         if (model.msgs && model.msgs.length) {
             const lastMessage = chat.lastReceivedKey
-                ? window
-                      .require('WAWebCollections')
-                      .Msg.get(chat.lastReceivedKey._serialized) ||
-                  (
-                      await window
-                          .require('WAWebCollections')
-                          .Msg.getMessagesById([
-                              chat.lastReceivedKey._serialized,
-                          ])
-                  )?.messages?.[0]
+                ? await window.WWebJS.getMessageById(chat.lastReceivedKey)
                 : null;
-            lastMessage &&
-                (model.lastMessage =
-                    window.WWebJS.getMessageModel(lastMessage));
+            if (lastMessage) {
+                model.lastMessage = window.WWebJS.getMessageModel(lastMessage);
+            }
         }
 
         delete model.msgs;
