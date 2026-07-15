@@ -1234,7 +1234,7 @@ class Client extends EventEmitter {
                             const parentMsgKey = reaction.reactionParentKey;
                             const timestamp = reaction.reactionTimestamp / 1000;
                             const sender = reaction.author ?? reaction.from;
-                            const senderUserJid = sender.$1;
+                            const senderUserJid = sender._serialized;
 
                             return {
                                 ...reaction,
@@ -1262,12 +1262,14 @@ class Client extends EventEmitter {
                             const parentMsgKey = vote.pollUpdateParentKey;
                             const timestamp = vote.t / 1000;
                             const sender = vote.author ?? vote.from;
-                            const senderUserJid = sender.$1;
+                            const senderUserJid = sender._serialized;
 
-                            let parentMessage = Msg.get(parentMsgKey.$1);
+                            let parentMessage = Msg.get(
+                                parentMsgKey._serialized,
+                            );
                             if (!parentMessage) {
                                 const fetched = await Msg.getMessagesById([
-                                    parentMsgKey.$1,
+                                    parentMsgKey._serialized,
                                 ]);
                                 parentMessage = fetched?.messages?.[0] || null;
                             }
@@ -1500,7 +1502,9 @@ class Client extends EventEmitter {
                 console.warn(
                     'Mentions with an array of Contact are now deprecated. See more at https://github.com/wwebjssapp-web.js/pull/2166.',
                 );
-                options.mentions = options.mentions.map((a) => a.id.$1);
+                options.mentions = options.mentions.map(
+                    (a) => a.id._serialized,
+                );
             }
         }
 
@@ -1546,7 +1550,7 @@ class Client extends EventEmitter {
             internalOptions.event = content;
             content = '';
         } else if (content instanceof Contact) {
-            internalOptions.contactCard = content.id.$1;
+            internalOptions.contactCard = content.id._serialized;
             content = '';
         } else if (
             Array.isArray(content) &&
@@ -1554,7 +1558,7 @@ class Client extends EventEmitter {
             content[0] instanceof Contact
         ) {
             internalOptions.contactCardList = content.map(
-                (contact) => contact.id.$1,
+                (contact) => contact.id._serialized,
             );
             content = '';
         } else if (content instanceof Buttons) {
@@ -1894,7 +1898,7 @@ class Client extends EventEmitter {
                 .joinGroupViaInvite(inviteCode);
         }, inviteCode);
 
-        return res.gid.$1;
+        return res.gid._serialized;
     }
 
     /**
@@ -2216,7 +2220,7 @@ class Client extends EventEmitter {
 
     /**
      * Gets the Contact's common groups with you. Returns empty array if you don't have any common group.
-     * @param {string} contactId the whatsapp user's ID ($1 format)
+     * @param {string} contactId the whatsapp user's ID (_serialized format)
      * @returns {Promise<WAWebJS.ChatId[]>}
      */
     async getCommonGroups(contactId) {
@@ -2339,7 +2343,7 @@ class Client extends EventEmitter {
      * @property {Object} gid An object that handles the newly created group ID
      * @property {string} gid.server
      * @property {string} gid.user
-     * @property {string} gid.$1
+     * @property {string} gid._serialized
      * @property {Object.<string, ParticipantResult>} participants An object that handles the result value for each added to the group participant
      */
 
@@ -2365,7 +2369,7 @@ class Client extends EventEmitter {
      */
     async createGroup(title, participants = [], options = {}) {
         !Array.isArray(participants) && (participants = [participants]);
-        participants.map((p) => (p instanceof Contact ? p.id.$1 : p));
+        participants.map((p) => (p instanceof Contact ? p.id._serialized : p));
 
         return await this.pupPage.evaluate(
             async (title, participants, options) => {
@@ -2438,7 +2442,7 @@ class Client extends EventEmitter {
                         (participant.wid = window
                             .require('WAWebApiContact')
                             .getPhoneNumber(participant.wid));
-                    const participantId = participant.wid.$1;
+                    const participantId = participant.wid._serialized;
                     const statusCode = participant.error || 200;
 
                     if (autoSendInviteV4 && statusCode === 403) {
@@ -2454,7 +2458,7 @@ class Client extends EventEmitter {
                                     (await window
                                         .require('WAWebCollections')
                                         .Chat.find(participant.wid)),
-                                createGroupResult.wid.$1,
+                                createGroupResult.wid._serialized,
                                 createGroupResult.subject,
                                 participant.invite_code,
                                 participant.invite_code_exp,
@@ -2505,7 +2509,7 @@ class Client extends EventEmitter {
      * @property {ChatId} nid An object that handels the newly created channel ID
      * @property {string} nid.server 'newsletter'
      * @property {string} nid.user 'XXXXXXXXXX'
-     * @property {string} nid.$1 'XXXXXXXXXX@newsletter'
+     * @property {string} nid._serialized 'XXXXXXXXXX@newsletter'
      * @property {string} inviteLink The channel invite link, starts with 'https://whatsapp.com/channel/'
      * @property {number} createdAtTs The timestamp the channel was created at
      */
@@ -2928,7 +2932,7 @@ class Client extends EventEmitter {
             let chatIds = window
                 .require('WAWebCollections')
                 .Blocklist.getModelsArray()
-                .map((a) => a.id.$1);
+                .map((a) => a.id._serialized);
             return Promise.all(
                 chatIds.map((id) => window.WWebJS.getContact(id)),
             );
@@ -2949,7 +2953,7 @@ class Client extends EventEmitter {
             (chatid, media) => {
                 return window.WWebJS.setPicture(chatid, media);
             },
-            this.info.wid.$1,
+            this.info.wid._serialized,
             media,
         );
 
@@ -2963,7 +2967,7 @@ class Client extends EventEmitter {
     async deleteProfilePicture() {
         const success = await this.pupPage.evaluate((chatid) => {
             return window.WWebJS.deletePicture(chatid);
-        }, this.info.wid.$1);
+        }, this.info.wid._serialized);
 
         return success;
     }
@@ -2989,7 +2993,7 @@ class Client extends EventEmitter {
                 );
                 const chats = window
                     .require('WAWebCollections')
-                    .Chat.filter((e) => chatIds.includes(e.id.$1));
+                    .Chat.filter((e) => chatIds.includes(e.id._serialized));
 
                 let actions = labels.map((label) => ({
                     id: label.id,
@@ -3370,8 +3374,8 @@ class Client extends EventEmitter {
                         await window.WWebJS.enforceLidAndPnRetrieval(userId);
 
                     return {
-                        lid: lid?.$1,
-                        pn: phone?.$1,
+                        lid: lid?._serialized,
+                        pn: phone?._serialized,
                     };
                 }),
             );
@@ -3444,7 +3448,7 @@ class Client extends EventEmitter {
 
             serialized.chatId = window
                 .require('WAWebJidToWid')
-                .userJidToUserWid(serialized.chatJid).$1;
+                .userJidToUserWid(serialized.chatJid)._serialized;
             delete serialized.chatJid;
 
             return serialized;
@@ -3463,7 +3467,9 @@ class Client extends EventEmitter {
             throw 'Invalid usage! Can only be used with a pollCreation message';
 
         const pollVotes = await this.pupPage.evaluate(async (msg) => {
-            const msgKey = window.require('WAWebMsgKey').fromString(msg.id.$1);
+            const msgKey = window
+                .require('WAWebMsgKey')
+                .fromString(msg.id._serialized);
             let pollVotes = await window
                 .require('WAWebPollsVotesSchema')
                 .getTable()
