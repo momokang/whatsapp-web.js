@@ -800,6 +800,25 @@ exports.LoadUtils = () => {
         return mediaData;
     };
 
+    /**
+     * Newer WhatsApp Web builds emit wid/key objects with a $1 property
+     * instead of _serialized. Node-side code reads _serialized, so copy
+     * $1 over wherever it is missing. Mutates and returns the object.
+     */
+    window.WWebJS.normalizeSerializedIds = (obj, depth = 0) => {
+        if (!obj || typeof obj !== 'object' || depth > 8) return obj;
+        if (obj.$1 !== undefined && obj._serialized === undefined) {
+            obj._serialized = obj.$1;
+        }
+        for (const key of Object.keys(obj)) {
+            const value = obj[key];
+            value &&
+                typeof value === 'object' &&
+                window.WWebJS.normalizeSerializedIds(value, depth + 1);
+        }
+        return obj;
+    };
+
     window.WWebJS.getMessageModel = (message) => {
         const msg = message.serialize();
 
@@ -830,13 +849,13 @@ exports.LoadUtils = () => {
 
         if (typeof msg.id.remote === 'object') {
             msg.id = Object.assign({}, msg.id, {
-                remote: msg.id.remote._serialized,
+                remote: msg.id.remote._serialized || msg.id.remote.$1,
             });
         }
 
         delete msg.pendingAckUpdate;
 
-        return msg;
+        return window.WWebJS.normalizeSerializedIds(msg);
     };
 
     window.WWebJS.getChat = async (chatId, { getAsModel = true } = {}) => {
@@ -953,7 +972,7 @@ exports.LoadUtils = () => {
             model.isGroup = true;
             const chatWid = window
                 .require('WAWebWidFactory')
-                .createWid(chat.id._serialized);
+                .createWid(chat.id._serialized || chat.id.$1);
             const groupMetadata =
                 window.require('WAWebCollections').GroupMetadata ||
                 window.require('WAWebCollections').WAWebGroupMetadataCollection;
@@ -993,7 +1012,7 @@ exports.LoadUtils = () => {
         delete model.msgUnsyncedButtonReplyMsgs;
         delete model.unsyncedButtonReplies;
 
-        return model;
+        return window.WWebJS.normalizeSerializedIds(model);
     };
 
     window.WWebJS.getContactModel = (contact) => {
@@ -1044,7 +1063,7 @@ exports.LoadUtils = () => {
         res.isMyContact = getIsMyContact(contact);
         res.isEnterprise = ContactMethods.getIsEnterprise(contact);
 
-        return res;
+        return window.WWebJS.normalizeSerializedIds(res);
     };
 
     window.WWebJS.getContact = async (contactId) => {
@@ -1109,7 +1128,7 @@ exports.LoadUtils = () => {
         const { Msg } = window.require('WAWebCollections');
 
         const serialized =
-            typeof msgId === 'string' ? msgId : msgId?._serialized;
+            typeof msgId === 'string' ? msgId : msgId?._serialized || msgId?.$1;
 
         const candidates = [];
         if (typeof msgId === 'string') {
@@ -1132,11 +1151,17 @@ exports.LoadUtils = () => {
                 const { createWid } = window.require('WAWebWidFactory');
                 const reconstructed = {
                     ...msgId,
-                    remote: createWid(msgId.remote._serialized || msgId.remote),
+                    remote: createWid(
+                        msgId.remote._serialized ||
+                            msgId.remote.$1 ||
+                            msgId.remote,
+                    ),
                 };
                 msgId.participant &&
                     (reconstructed.participant = createWid(
-                        msgId.participant._serialized || msgId.participant,
+                        msgId.participant._serialized ||
+                            msgId.participant.$1 ||
+                            msgId.participant,
                     ));
                 candidates.push(reconstructed);
             }
@@ -1164,7 +1189,8 @@ exports.LoadUtils = () => {
             const models =
                 Msg.getModelsArray?.() || Msg.models || Msg._models || [];
             for (const model of models) {
-                if (model?.id?._serialized === serialized) return model;
+                const modelId = model?.id?._serialized || model?.id?.$1;
+                if (modelId === serialized) return model;
             }
         }
 
